@@ -1,19 +1,43 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
-    xmlns:tools="http://schemas.android.com/tools"
-    android:id="@+id/main"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    tools:context=".MainActivity">
+    android:orientation="vertical"
+    android:padding="24dp"
+    android:gravity="center"
+    android:background="@color/medibook_white">
 
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="Hello World!"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent" />
+        android:text="MediBook"
+        android:textSize="36sp"
+        android:textStyle="bold"
+        android:textColor="@color/medibook_text_dark"
+        android:layout_marginBottom="8dp" />
 
-</androidx.constraintlayout.widget.ConstraintLayout>
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Tư vấn AI &amp; Đặt lịch khám bệnh"
+        android:textSize="14sp"
+        android:layout_marginBottom="64dp" />
+
+    <Button
+        android:id="@+id/btnBenhNhan"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Tôi là Bệnh nhân"
+        android:textColor="@color/medibook_white"
+        android:backgroundTint="@color/medibook_primary"
+        android:layout_marginBottom="12dp" />
+
+    <Button
+        android:id="@+id/btnBacSi"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Tôi là Bác sĩ"
+        android:textColor="@color/medibook_primary"
+        android:backgroundTint="@color/medibook_white" />
+
+</LinearLayout>
