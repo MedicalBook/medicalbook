@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical">
+
+    <org.osmdroid.views.MapView
+        android:id="@+id/mapView"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1" />
+
+    <!-- MỚI: nút tìm đường ngắn nhất đến bệnh viện gần nhất -->
+    <Button
+        android:id="@+id/btnTimDuong"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="16dp"
+        android:layout_marginEnd="16dp"
+        android:layout_marginTop="12dp"
+        android:text="Tìm đường đến bệnh viện gần nhất"
+        android:textColor="@color/medibook_white"
+        android:backgroundTint="#F97316" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:paddingStart="16dp"
+        android:paddingEnd="16dp"
+        android:paddingTop="4dp"
+        android:gravity="center">
+
+        <Button
+            android:id="@+id/btnBatDau"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="Bắt đầu"
+            android:textColor="@color/medibook_white"
+            android:backgroundTint="@color/medibook_primary"
+            android:layout_marginEnd="8dp" />
+
+        <Button
+            android:id="@+id/btnDung"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="Dừng"
+            android:enabled="false"
+            android:layout_marginEnd="8dp" />
+
+        <!-- MỚI: xoá đường vẽ trên bản đồ -->
+        <Button
+            android:id="@+id/btnXoa"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="Xoá" />
+
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/tvTrangThai"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:padding="12dp"
+        android:text="Chạm vào bệnh viện hoặc nhấn giữ trên bản đồ để chọn điểm đến"
+        android:gravity="center" />
+
+</LinearLayout>
