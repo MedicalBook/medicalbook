@@ -23,6 +23,7 @@ import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 
 import com.medibook.app.routing.CoSoYTe;
+import com.medibook.app.routing.TimBenhVienOverpass;
 import com.medibook.app.routing.TimDuongOsrm;
 import com.medibook.app.tracking.AppDatabase;
 import com.medibook.app.tracking.DiemToaDo;
@@ -76,6 +77,13 @@ public class TheoDoiHanhTrinhActivity extends AppCompatActivity {
     private final ExecutorService luongMang = Executors.newSingleThreadExecutor(); // luồng nền gọi OSRM
     private boolean dangTimDuong = false;
 
+    // MỚI: bệnh viện thật quanh vị trí người dùng (OpenStreetMap)
+    private static final int BAN_KINH_TIM_MET = 5000;       // tìm trong 5 km trước
+    private static final int BAN_KINH_MO_RONG_MET = 15000;  // không có thì mở rộng 15 km
+    private static final int SO_MARKER_TOI_DA = 20;         // chỉ hiện 20 bệnh viện gần nhất cho đỡ rối
+    private final List<Marker> cacMarkerBenhVien = new ArrayList<>();
+    private volatile boolean dangDungDuLieuMau = false;
+
     // MỚI: ghi nhớ hành trình đang ghi dở (để mở lại app thì vẽ tiếp, còn đã Dừng thì bản đồ sạch)
     private static final String KHOA_MA_DANG_GHI = "ma_hanh_trinh_dang_ghi";
     private SharedPreferences boNho;
@@ -119,7 +127,6 @@ public class TheoDoiHanhTrinhActivity extends AppCompatActivity {
         mapView.getOverlays().add(duongDi);
 
         // MỚI: hiện các bệnh viện + cho phép nhấn giữ để chọn điểm đến
-        hienThiCacCoSoYTe();
         dangKySuKienBanDo();
 
         locationListener = location -> xuLyViTriMoi(location);
@@ -137,9 +144,42 @@ public class TheoDoiHanhTrinhActivity extends AppCompatActivity {
 
     // ================== MỚI: TÌM ĐƯỜNG NGẮN NHẤT ==================
 
-    // Vẽ marker cho từng bệnh viện, chạm vào marker thì tìm đường đến đó
-    private void hienThiCacCoSoYTe() {
-        for (CoSoYTe coSo : CoSoYTe.danhSachMau()) {
+    // MỚI: lấy bệnh viện quanh vị trí (chạy ở LUỒNG NỀN)
+    // Có mạng: lấy từ OpenStreetMap. Lỗi/không có mạng: dùng danh sách mẫu viết sẵn.
+    private List<CoSoYTe> layBenhVienXungQuanh(GeoPoint viTri) {
+        try {
+            List<CoSoYTe> ds = TimBenhVienOverpass.timQuanh(viTri, BAN_KINH_TIM_MET);
+            if (ds.isEmpty()) {
+                ds = TimBenhVienOverpass.timQuanh(viTri, BAN_KINH_MO_RONG_MET);
+            }
+            if (!ds.isEmpty()) {
+                dangDungDuLieuMau = false;
+                return CoSoYTe.ganNhat(ds, viTri, SO_MARKER_TOI_DA);
+            }
+        } catch (Exception e) {
+            // không tải được OpenStreetMap → dùng dữ liệu mẫu bên dưới
+        }
+        dangDungDuLieuMau = true;
+        return CoSoYTe.ganNhat(viTri, SO_MARKER_TOI_DA);
+    }
+
+    // MỚI: tải bệnh viện quanh vị trí rồi vẽ marker (dùng khi mới mở app)
+    private void taiVaHienThiBenhVien(GeoPoint viTri) {
+        luongMang.execute(() -> {
+            List<CoSoYTe> ds = layBenhVienXungQuanh(viTri);
+            runOnUiThread(() -> hienThiMarkerBenhVien(ds));
+        });
+    }
+
+    // SỬA: vẽ marker theo danh sách bệnh viện tìm được (xoá marker cũ trước)
+    private void hienThiMarkerBenhVien(List<CoSoYTe> danhSach) {
+        for (Marker cu : cacMarkerBenhVien) {
+            cu.closeInfoWindow();
+            mapView.getOverlays().remove(cu);
+        }
+        cacMarkerBenhVien.clear();
+
+        for (CoSoYTe coSo : danhSach) {
             Marker marker = new Marker(mapView);
             marker.setPosition(coSo.viTri());
             marker.setTitle(coSo.ten);
@@ -150,7 +190,9 @@ public class TheoDoiHanhTrinhActivity extends AppCompatActivity {
                 return true;
             });
             mapView.getOverlays().add(marker);
+            cacMarkerBenhVien.add(marker);
         }
+        mapView.invalidate();
     }
 
     // Nhấn giữ bất kỳ điểm nào trên bản đồ để chọn làm điểm đến
@@ -198,10 +240,12 @@ public class TheoDoiHanhTrinhActivity extends AppCompatActivity {
         }
         if (dangTimDuong) return;
         dangTimDuong = true;
-        tvTrangThai.setText("Đang tìm bệnh viện gần nhất...");
+        tvTrangThai.setText("Đang tìm các bệnh viện quanh bạn...");
 
         luongMang.execute(() -> {
-            List<CoSoYTe> ungVien = CoSoYTe.ganNhat(viTri, SO_UNG_VIEN_GAN_NHAT);
+            // SỬA: lấy bệnh viện THẬT quanh vị trí (OpenStreetMap), rồi lọc 3 cái gần nhất
+            List<CoSoYTe> danhSach = layBenhVienXungQuanh(viTri);
+            List<CoSoYTe> ungVien = CoSoYTe.ganNhat(danhSach, viTri, SO_UNG_VIEN_GAN_NHAT);
             TimDuongOsrm.KetQua tuyenTotNhat = null;
             CoSoYTe coSoTotNhat = null;
 
@@ -221,10 +265,14 @@ public class TheoDoiHanhTrinhActivity extends AppCompatActivity {
             final CoSoYTe den = coSoTotNhat;
             runOnUiThread(() -> {
                 dangTimDuong = false;
+                hienThiMarkerBenhVien(danhSach); // MỚI: cập nhật marker theo vị trí hiện tại
                 if (ketQua == null) {
                     baoLoiTimDuong();
                 } else {
                     veDuongGoiY(ketQua, den.ten, den.viTri());
+                    tvTrangThai.append(dangDungDuLieuMau
+                            ? "\n(Dữ liệu mẫu: không tải được OpenStreetMap)"
+                            : "\n(Nguồn: OpenStreetMap, " + danhSach.size() + " bệnh viện quanh bạn)");
                 }
             });
         });
@@ -448,6 +496,10 @@ public class TheoDoiHanhTrinhActivity extends AppCompatActivity {
                     && duongDi.getActualPoints().isEmpty()
                     && duongGoiY.getActualPoints().isEmpty()) {
                 mapView.getController().animateTo(viTriHienTai);
+            }
+            // MỚI: có vị trí lần đầu thì tải và hiện các bệnh viện xung quanh
+            if (viTriHienTai != null) {
+                taiVaHienThiBenhVien(viTriHienTai);
             }
         }));
     }

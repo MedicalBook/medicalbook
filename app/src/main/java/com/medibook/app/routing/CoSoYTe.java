@@ -38,9 +38,14 @@ public class CoSoYTe {
         return ds;
     }
 
-    // Lấy N cơ sở gần nhất theo đường chim bay (Haversine)
+    // Lấy N cơ sở gần nhất theo đường chim bay (Haversine) trong danh sách mẫu
     public static List<CoSoYTe> ganNhat(GeoPoint viTri, int soLuong) {
-        List<CoSoYTe> ds = danhSachMau();
+        return ganNhat(danhSachMau(), viTri, soLuong);
+    }
+
+    // Lấy N cơ sở gần nhất theo đường chim bay (Haversine) trong 1 danh sách bất kỳ
+    public static List<CoSoYTe> ganNhat(List<CoSoYTe> danhSach, GeoPoint viTri, int soLuong) {
+        List<CoSoYTe> ds = new ArrayList<>(danhSach);
         ds.sort((a, b) -> Double.compare(
                 KhoangCach.haversineMet(viTri.getLatitude(), viTri.getLongitude(), a.viDo, a.kinhDo),
                 KhoangCach.haversineMet(viTri.getLatitude(), viTri.getLongitude(), b.viDo, b.kinhDo)));
