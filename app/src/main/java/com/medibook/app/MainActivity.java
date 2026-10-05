@@ -9,7 +9,7 @@ import androidx.appcompat.app.AppCompatActivity;
 
 public class MainActivity extends AppCompatActivity {
 
-    private Button btnBenhNhan, btnBacSi;
+    private Button btnBenhNhan, btnBacSi, btnBanDo;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -37,5 +37,11 @@ public class MainActivity extends AppCompatActivity {
                 startActivity(intent);
             }
         });
+
+        // TẠM THỜI: lối vào màn hình bản đồ (vị trí, tìm đường, lưu vết)
+        // Sau này sẽ mở từ trang chủ bệnh nhân sau khi đăng nhập
+        btnBanDo = findViewById(R.id.btnBanDo);
+        btnBanDo.setOnClickListener(v ->
+                startActivity(new Intent(MainActivity.this, TheoDoiHanhTrinhActivity.class)));
     }
 }

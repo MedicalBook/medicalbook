@@ -38,6 +38,16 @@
         android:layout_height="wrap_content"
         android:text="Tôi là Bác sĩ"
         android:textColor="@color/medibook_primary"
-        android:backgroundTint="@color/medibook_white" />
+        android:backgroundTint="@color/medibook_white"
+        android:layout_marginBottom="12dp" />
+
+    <!-- TẠM THỜI: lối vào màn hình bản đồ, sau này chuyển vào trang chủ bệnh nhân -->
+    <Button
+        android:id="@+id/btnBanDo"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Bản đồ &amp; tìm bệnh viện (tạm)"
+        android:textColor="@color/medibook_white"
+        android:backgroundTint="#F97316" />
 
 </LinearLayout>
