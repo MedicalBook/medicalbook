@@ -27,10 +27,11 @@ import java.util.Set;
  */
 public class TimBenhVienOverpass {
 
-    // 2 server Overpass công cộng: server 1 lỗi/quá tải thì thử server 2
+    // 3 server Overpass công cộng: server này lỗi/quá tải thì thử server tiếp theo
     private static final String[] CAC_SERVER = {
             "https://overpass-api.de/api/interpreter",
-            "https://overpass.kumi.systems/api/interpreter"
+            "https://overpass.kumi.systems/api/interpreter",
+            "https://maps.mail.ru/osm/tools/overpass/api/interpreter"
     };
 
     public static List<CoSoYTe> timQuanh(GeoPoint viTri, int banKinhMet) throws Exception {

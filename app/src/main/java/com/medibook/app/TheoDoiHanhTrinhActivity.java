@@ -13,6 +13,7 @@ import android.net.ConnectivityManager;
 import android.net.Network;
 import android.os.Bundle;
 import android.preference.PreferenceManager;
+import android.util.Log;
 import android.view.WindowManager;
 import android.widget.Button;
 import android.widget.TextView;
@@ -23,6 +24,7 @@ import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 
 import com.medibook.app.routing.CoSoYTe;
+import com.medibook.app.routing.KhoangCach;
 import com.medibook.app.routing.TimBenhVienOverpass;
 import com.medibook.app.routing.TimDuongOsrm;
 import com.medibook.app.tracking.AppDatabase;
@@ -49,6 +51,7 @@ import java.util.concurrent.Executors;
 public class TheoDoiHanhTrinhActivity extends AppCompatActivity {
 
     private static final int MA_YEU_CAU_QUYEN_VI_TRI = 100;
+    private static final String TAG = "MediBook"; // lọc Logcat bằng: tag:MediBook
     private static final int SO_UNG_VIEN_GAN_NHAT = 3; // số bệnh viện gần nhất (chim bay) đem đi so đường thật
 
     private MapView mapView;
@@ -83,6 +86,10 @@ public class TheoDoiHanhTrinhActivity extends AppCompatActivity {
     private static final int SO_MARKER_TOI_DA = 20;         // chỉ hiện 20 bệnh viện gần nhất cho đỡ rối
     private final List<Marker> cacMarkerBenhVien = new ArrayList<>();
     private volatile boolean dangDungDuLieuMau = false;
+    // SỬA: ghi nhớ danh sách bệnh viện đã tải thành công để dùng lại
+    private static final int BAN_KINH_DUNG_LAI_MET = 2000;
+    private volatile List<CoSoYTe> boNhoBenhVien = null;
+    private volatile GeoPoint viTriBoNho = null;
 
     // MỚI: ghi nhớ hành trình đang ghi dở (để mở lại app thì vẽ tiếp, còn đã Dừng thì bản đồ sạch)
     private static final String KHOA_MA_DANG_GHI = "ma_hanh_trinh_dang_ghi";
@@ -140,6 +147,13 @@ public class TheoDoiHanhTrinhActivity extends AppCompatActivity {
         kiemTraVaXinQuyenViTri();
         dangKyTheoDoiMang();
         moLaiHanhTrinhGanNhat();
+
+        // Mở sẵn Room để Database Inspector xem được ngay khi vào màn hình
+        luongNen.execute(() -> {
+            dao.layMaHanhTrinhGanNhat();
+            Log.d(TAG, "[ROOM] Đã mở database medibook_local.db");
+        });
+        Log.d(TAG, "[APP] Mở màn hình Theo dõi hành trình");
     }
 
     // ================== MỚI: TÌM ĐƯỜNG NGẮN NHẤT ==================
@@ -147,18 +161,44 @@ public class TheoDoiHanhTrinhActivity extends AppCompatActivity {
     // MỚI: lấy bệnh viện quanh vị trí (chạy ở LUỒNG NỀN)
     // Có mạng: lấy từ OpenStreetMap. Lỗi/không có mạng: dùng danh sách mẫu viết sẵn.
     private List<CoSoYTe> layBenhVienXungQuanh(GeoPoint viTri) {
+        // 1. Vừa tải ở gần đây (< 2 km) thì dùng lại, không gọi Overpass nữa
+        //    → nhanh hơn và tránh bị server Overpass chặn vì gọi quá nhiều lần
+        if (boNhoBenhVien != null && viTriBoNho != null
+                && KhoangCach.haversineMet(viTri.getLatitude(), viTri.getLongitude(),
+                viTriBoNho.getLatitude(), viTriBoNho.getLongitude()) < BAN_KINH_DUNG_LAI_MET) {
+            dangDungDuLieuMau = false;
+            Log.d(TAG, "[OVERPASS] Dùng lại " + boNhoBenhVien.size() + " bệnh viện đã tải trước đó");
+            return CoSoYTe.ganNhat(boNhoBenhVien, viTri, SO_MARKER_TOI_DA);
+        }
+
+        // 2. Gọi Overpass để lấy bệnh viện thật quanh vị trí
         try {
             List<CoSoYTe> ds = TimBenhVienOverpass.timQuanh(viTri, BAN_KINH_TIM_MET);
             if (ds.isEmpty()) {
                 ds = TimBenhVienOverpass.timQuanh(viTri, BAN_KINH_MO_RONG_MET);
             }
             if (!ds.isEmpty()) {
+                boNhoBenhVien = ds;       // ghi nhớ để lần sau dùng lại
+                viTriBoNho = viTri;
                 dangDungDuLieuMau = false;
+                Log.d(TAG, "[OVERPASS] Tìm thấy " + ds.size() + " bệnh viện quanh ("
+                        + viTri.getLatitude() + ", " + viTri.getLongitude() + ")");
                 return CoSoYTe.ganNhat(ds, viTri, SO_MARKER_TOI_DA);
             }
+            Log.w(TAG, "[OVERPASS] Không có bệnh viện nào trong 15 km");
         } catch (Exception e) {
-            // không tải được OpenStreetMap → dùng dữ liệu mẫu bên dưới
+            Log.e(TAG, "[OVERPASS] Lỗi: " + e.getMessage());
         }
+
+        // 3. Overpass lỗi nhưng đã từng tải thành công → dùng lại kết quả cũ
+        if (boNhoBenhVien != null) {
+            dangDungDuLieuMau = false;
+            Log.w(TAG, "[OVERPASS] Dùng lại danh sách bệnh viện đã tải lần trước");
+            return CoSoYTe.ganNhat(boNhoBenhVien, viTri, SO_MARKER_TOI_DA);
+        }
+
+        // 4. Chưa từng tải được lần nào → mới dùng dữ liệu mẫu
+        Log.w(TAG, "[OVERPASS] Chuyển sang dùng dữ liệu bệnh viện mẫu");
         dangDungDuLieuMau = true;
         return CoSoYTe.ganNhat(viTri, SO_MARKER_TOI_DA);
     }
@@ -252,13 +292,22 @@ public class TheoDoiHanhTrinhActivity extends AppCompatActivity {
             for (CoSoYTe coSo : ungVien) {
                 try {
                     TimDuongOsrm.KetQua kq = TimDuongOsrm.timDuong(viTri, coSo.viTri());
+                    Log.d(TAG, String.format(Locale.US, "[HAVERSINE] %s: chim bay %.2f km",
+                            coSo.ten, com.medibook.app.routing.KhoangCach.haversineMet(
+                                    viTri.getLatitude(), viTri.getLongitude(), coSo.viDo, coSo.kinhDo) / 1000));
+                    Log.d(TAG, String.format(Locale.US, "[OSRM] %s: đường thật %.2f km, %d phút",
+                            coSo.ten, kq.quangDuongMet / 1000, Math.round(kq.thoiGianGiay / 60)));
                     if (tuyenTotNhat == null || kq.quangDuongMet < tuyenTotNhat.quangDuongMet) {
                         tuyenTotNhat = kq;
                         coSoTotNhat = coSo;
                     }
                 } catch (Exception e) {
                     // bỏ qua bệnh viện này, thử bệnh viện tiếp theo
+                    Log.e(TAG, "[OSRM] Lỗi tìm đường đến " + coSo.ten + ": " + e.getMessage());
                 }
+            }
+            if (coSoTotNhat != null) {
+                Log.d(TAG, "[KẾT QUẢ] Bệnh viện có đường đi ngắn nhất: " + coSoTotNhat.ten);
             }
 
             final TimDuongOsrm.KetQua ketQua = tuyenTotNhat;
@@ -293,8 +342,11 @@ public class TheoDoiHanhTrinhActivity extends AppCompatActivity {
             TimDuongOsrm.KetQua kq = null;
             try {
                 kq = TimDuongOsrm.timDuong(viTri, dich);
+                Log.d(TAG, String.format(Locale.US, "[OSRM] Đến %s: %.2f km, %d phút",
+                        tenDich, kq.quangDuongMet / 1000, Math.round(kq.thoiGianGiay / 60)));
             } catch (Exception e) {
                 // xử lý ở dưới
+                Log.e(TAG, "[OSRM] Lỗi tìm đường đến " + tenDich + ": " + e.getMessage());
             }
             final TimDuongOsrm.KetQua ketQua = kq;
             runOnUiThread(() -> {
@@ -362,6 +414,7 @@ public class TheoDoiHanhTrinhActivity extends AppCompatActivity {
         btnBatDau.setEnabled(false);
         btnDung.setEnabled(true);
         tvTrangThai.setText((coMang ? "" : "[Offline] ") + "Đang ghi... chờ tín hiệu GPS");
+        Log.d(TAG, "[GHI] Bắt đầu hành trình " + maHanhTrinhHienTai);
     }
 
     private void xuLyViTriMoi(Location location) {
@@ -374,7 +427,15 @@ public class TheoDoiHanhTrinhActivity extends AppCompatActivity {
         DiemToaDo diemMoi = new DiemToaDo(
                 location.getLatitude(), location.getLongitude(),
                 System.currentTimeMillis(), maHanhTrinhHienTai);
-        luongNen.execute(() -> dao.themDiem(diemMoi));
+        final int thuTu = soDiem + 1;
+        final boolean offline = !coMang;
+        Log.d(TAG, String.format(Locale.US, "[GPS] Điểm #%d: %.6f, %.6f (sai số %.0f m)",
+                thuTu, location.getLatitude(), location.getLongitude(), location.getAccuracy()));
+        luongNen.execute(() -> {
+            dao.themDiem(diemMoi);
+            Log.d(TAG, "[ROOM] INSERT điểm #" + thuTu + " vào bảng diem_toa_do"
+                    + (offline ? " (đang OFFLINE)" : ""));
+        });
 
         soDiem++;
         tvTrangThai.setText((coMang ? "" : "[Offline] ") + "Đang ghi... đã lưu " + soDiem + " điểm");
@@ -388,12 +449,14 @@ public class TheoDoiHanhTrinhActivity extends AppCompatActivity {
         btnBatDau.setEnabled(true);
         btnDung.setEnabled(false);
 
+        Log.d(TAG, "[GHI] Dừng hành trình " + maHanhTrinhHienTai + ", tổng " + soDiem + " điểm");
         veLaiTuRoom(maHanhTrinhHienTai, "Đã dừng.");
     }
 
     private void veLaiTuRoom(String maHanhTrinh, String thongBao) {
         luongNen.execute(() -> {
             List<DiemToaDo> danhSach = dao.layTatCaDiemTheoHanhTrinh(maHanhTrinh);
+            Log.d(TAG, "[ROOM] SELECT " + danhSach.size() + " điểm của " + maHanhTrinh + " để vẽ lại");
 
             List<GeoPoint> cacDiem = new ArrayList<>();
             for (DiemToaDo d : danhSach) {
@@ -422,6 +485,7 @@ public class TheoDoiHanhTrinhActivity extends AppCompatActivity {
                 runOnUiThread(() -> {
                     boolean vuaMatMang = !coMang;
                     coMang = true;
+                    Log.d(TAG, "[MẠNG] Có mạng" + (vuaMatMang ? " trở lại → tải lại bản đồ, vẽ lại hành trình" : ""));
                     mapView.getTileProvider().clearTileCache();
                     mapView.invalidate();
                     if (vuaMatMang && maHanhTrinhHienTai != null) {
@@ -434,6 +498,7 @@ public class TheoDoiHanhTrinhActivity extends AppCompatActivity {
             public void onLost(Network network) {
                 runOnUiThread(() -> {
                     coMang = false;
+                    Log.w(TAG, "[MẠNG] Mất mạng → vẫn tiếp tục ghi GPS vào Room");
                     tvTrangThai.setText("[Offline] Mất mạng, vẫn đang lưu vị trí vào máy");
                 });
             }
